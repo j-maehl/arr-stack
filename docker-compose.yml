@@ -1,0 +1,252 @@
+services:
+  # VPN Container - All services except flaresolverr and jellyfin route through this
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      # qBittorrent
+      - 6881:6881
+      - 6881:6881/udp
+      - "${QBITTORRENT_PORT}:8080"
+      - "${QBITTORRENT_WEBUI_PORT}:8081"
+      # Radarr
+      - "${RADARR_PORT}:7878"
+      # Sonarr
+      - "${SONARR_PORT}:8989"
+      # Prowlarr
+      - "${PROWLARR_PORT}:9696"
+      # Jackett
+      - "${JACKETT_PORT}:9117"
+      # Jellyseerr
+      - "${JELLYSEERR_PORT}:5055"
+      # Unpackerr
+      - "${UNPACKERR_PORT}:5656"
+      # Watchstate
+      # - "${WATCHSTATE_PORT}:8080"
+      # SABnzbd
+      - "${SABNZBD_PORT}:8080"
+    volumes:
+      - ${CONFIG_DIR}/gluetun:/gluetun
+    environment:
+      - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER}
+      - VPN_TYPE=${VPN_TYPE}
+      - OPENVPN_USER=${VPN_USER}
+      - OPENVPN_PASSWORD=${VPN_PASSWORD}
+      - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES}
+      - SERVER_COUNTRIES=${VPN_SERVER_COUNTRIES}
+      - SERVER_CITIES=${VPN_SERVER_CITIES}
+      - TZ=${TZ}
+      - FIREWALL_OUTBOUND_SUBNETS=${LOCAL_SUBNET}
+      - HEALTH_VPN_DURATION_INITIAL=60s
+    healthcheck:
+      test: ping -c 1 www.google.com || exit 1
+      interval: 60s
+      retries: 3
+      start_period: 20s
+      timeout: 10s
+    restart: unless-stopped
+    networks:
+      - arr-stack
+
+  # qBittorrent - Torrent client
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=8081
+    volumes:
+      - ${CONFIG_DIR}/qbittorrent:/config
+      - ${DATA_DIR}/torrents:/data/torrents
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Radarr - Movie management
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${CONFIG_DIR}/radarr:/config
+      - ${DATA_DIR}:/data
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Sonarr - TV shows management
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${CONFIG_DIR}/sonarr:/config
+      - ${DATA_DIR}:/data
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Prowlarr - Indexer management
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${CONFIG_DIR}/prowlarr:/config
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Jackett - Indexer proxy
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: jackett
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - AUTO_UPDATE=true
+    volumes:
+      - ${CONFIG_DIR}/jackett:/config
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Jellyseerr - Media request management
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    network_mode: "service:gluetun"
+    environment:
+      - LOG_LEVEL=debug
+      - TZ=${TZ}
+    volumes:
+      - ${CONFIG_DIR}/jellyseerr:/app/config
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Unpackerr - Automatic archive extraction
+  unpackerr:
+    image: golift/unpackerr:latest
+    container_name: unpackerr
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      # Sonarr
+      - UN_SONARR_0_URL=http://localhost:8989
+      - UN_SONARR_0_API_KEY=${SONARR_API_KEY}
+      # Radarr
+      - UN_RADARR_0_URL=http://localhost:7878
+      - UN_RADARR_0_API_KEY=${RADARR_API_KEY}
+    volumes:
+      - ${DATA_DIR}:/data
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Swaparr-Sonarr - Language profile management for Sonarr
+  swaparr-sonarr:
+    image: ghcr.io/thijmengthn/swaparr:latest
+    container_name: swaparr-sonarr
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - BASEURL=http://0.0.0.0:${SONARR_PORT}
+      - APIKEY=${SONARR_API_KEY}
+      - SCAN_INTERVAL=${SWAPARR_INTERVAL}
+    volumes:
+      - ${CONFIG_DIR}/swaparr-sonarr:/config
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # SABnzbd - Usenet downloader
+  sabnzbd:
+    image: lscr.io/linuxserver/sabnzbd:latest
+    container_name: sabnzbd
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${CONFIG_DIR}/sabnzbd:/config
+      - ${DATA_DIR}/usenet:/data/usenet
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # FlareSolverr - Cloudflare bypass (NOT behind VPN)
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_HTML=${LOG_HTML:-false}
+      - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
+      - TZ=${TZ}
+    ports:
+      - "${FLARESOLVERR_PORT}:8191"
+    restart: unless-stopped
+    networks:
+      - arr-stack
+
+  # Jellyfin - Media server (NOT behind VPN)
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - JELLYFIN_PublishedServerUrl=${JELLYFIN_PUBLISHED_URL}
+    volumes:
+      - ${CONFIG_DIR}/jellyfin:/config
+      - ${DATA_DIR}/media:/data/media
+    ports:
+      - "${JELLYFIN_PORT}:8096"
+      - "${JELLYFIN_HTTPS_PORT}:8920"
+    # devices:
+    #  - /dev/dri:/dev/dri  # For hardware acceleration (optional)
+    restart: unless-stopped
+    networks:
+      - arr-stack
+
+networks:
+  arr-stack:
+    driver: bridge
