@@ -18,6 +18,50 @@ A Docker Compose setup for a complete media management stack using the *Arr appl
 3. Ensure the required directories exist (as per `.env.example`).
 4. Run `docker-compose up -d` to start the stack.
 
+## Architecture
+
+```mermaid
+graph TB
+    INT["🌐 Internet"]
+    
+    subgraph VPN["🔒 VPN Network via Gluetun<br/><i>All traffic encrypted</i>"]
+        direction LR
+        QB["🎬 qBittorrent<br/>Torrent Client"]
+        RD["🎥 Radarr<br/>Movie Management"]
+        SN["📺 Sonarr<br/>TV Management"]
+        PR["🔍 Prowlarr<br/>Indexer Manager"]
+        JK["🎫 Jackett<br/>Indexer Proxy"]
+        JS["🎟️ Jellyseerr<br/>Media Requests"]
+        UP["📦 Unpackerr<br/>Auto Extraction"]
+        SAB["📥 SABnzbd<br/>Usenet Client"]
+        SWS["🔄 Swaparr<br/>Language Profiles"]
+    end
+    
+    subgraph Clear["🌐 Direct Network<br/><i>No VPN Protection</i>"]
+        FS["⚡ FlareSolverr<br/>Cloudflare Bypass"]
+        JF["📹 Jellyfin<br/>Media Server"]
+    end
+    
+    ST["💾 Storage<br/>Config & Media"]
+    
+    INT -->|VPN Tunnel| VPN
+    INT -->|Direct| FS
+    VPN --> ST
+    Clear --> ST
+    QB -.->|Torrents| ST
+    SAB -.->|Usenet| ST
+    
+    classDef vpn fill:#4a90e2,stroke:#2e5c8a,color:#fff,stroke-width:3px
+    classDef direct fill:#f5a623,stroke:#d68910,color:#fff,stroke-width:3px
+    classDef storage fill:#7ed321,stroke:#5fa319,color:#fff,stroke-width:2px
+    classDef internet fill:#bd10e0,stroke:#7d0a99,color:#fff,stroke-width:2px
+    
+    class VPN vpn
+    class Clear direct
+    class ST storage
+    class INT internet
+```
+
 ## Services
 
 - **Gluetun**: VPN container routing traffic for most services.
@@ -29,6 +73,7 @@ A Docker Compose setup for a complete media management stack using the *Arr appl
 - **Jellyseerr**: Media request management.
 - **Unpackerr**: Automatic archive extraction.
 - **SABnzbd**: Usenet downloader.
+- **Swaparr**: Language profile management for Sonarr.
 - **FlareSolverr**: Cloudflare bypass (not behind VPN).
 - **Jellyfin**: Media server (not behind VPN).
 
