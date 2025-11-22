@@ -86,3 +86,63 @@ Access the web UIs using the ports defined in your `.env` file.
 - Most services route through the VPN for privacy.
 - Jellyfin and FlareSolverr are exposed directly without VPN.
 - Follow Trash-Guides for optimal configuration.
+
+### Additional notes
+
+- **Gluetun documentation:** https://github.com/qmcgaw/gluetun
+
+- **FlareSolverr is optional:** the `flaresolverr` service is defined in `docker-compose.yml` but placed in its own Compose profile so it does not start by default. To start the stack including FlareSolverr, enable the profile:
+
+    - Using the Compose profile flag:
+
+        ```bash
+        docker compose --profile flaresolverr up -d
+        ```
+
+    - Or by setting the `COMPOSE_PROFILES` environment variable (fish shell example):
+
+        ```fish
+        set -x COMPOSE_PROFILES flaresolverr
+        docker compose up -d
+        ```
+
+    If you prefer FlareSolverr always present, remove the `profiles` key from its service in `docker-compose.yml`.
+
+### Profiles: Torrent and Usenet
+
+This compose file now supports two additional optional profiles to start only the services you need:
+
+- `torrent` — starts torrent-related services (e.g. `qbittorrent`, `jackett`) and shared Arr services.
+- `usenet` — starts usenet-related services (e.g. `sabnzbd`) and shared Arr services.
+
+Examples:
+
+- Start only torrent services:
+
+    ```bash
+    docker compose --profile torrent up -d
+    ```
+
+- Start only usenet services:
+
+    ```bash
+    docker compose --profile usenet up -d
+    ```
+
+- Start both torrent and usenet services:
+
+    ```bash
+    docker compose --profile torrent --profile usenet up -d
+    ```
+
+- Fish shell using `COMPOSE_PROFILES`:
+
+    ```fish
+    set -x COMPOSE_PROFILES torrent,usenet
+    docker compose up -d
+    ```
+
+Services that are shared between both profiles include `radarr`, `sonarr`, `prowlarr`, `unpackerr`, `swaparr-sonarr`, and `jellyseerr`. Services exclusive to a profile:
+
+- `torrent`: `qbittorrent`, `jackett`
+- `usenet`: `sabnzbd`
